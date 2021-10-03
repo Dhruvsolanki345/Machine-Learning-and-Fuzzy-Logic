@@ -1,0 +1,223 @@
+import numpy as np
+np.set_printoptions(suppress=True, precision=4)
+
+import sys
+import matplotlib.pyplot as plt
+import sklearn.decomposition as decomp
+import sklearn.linear_model as linear_model
+import sklearn.datasets as sk_data
+from sklearn.preprocessing import StandardScaler
+import numpy.linalg as nla
+import sklearn.svm as svm
+import pandas as pd
+exam_data1 = np.array([[1, 2, 3, 4, 5],
+                    [57, 70, 76, 84, 91]]).T
+print(exam_data1)
+exam_data2 = np.array([[1, 2, 3, 4, 5],
+                      [57, 70, 99, 84, 91]]).T
+print(exam_data2)
+def plot_mb(m, b, ax, style):
+    'plot a line y=mx+b on a matplotlib axis'
+    xs = ax.get_xlim()
+    ax.plot(xs, m*xs + b, style) #style is type of line
+fig, axes = plt.subplots(1,2,sharex=True)
+x=exam_data1[:,0:1]
+y=exam_data1[:,1]
+# Fit a straight straight line to the linear data
+lr = linear_model.LinearRegression().fit(exam_data1[:,0:1],exam_data1[:,1])
+axes[0].plot(x,y, 'ro')
+plot_mb(lr.coef_, lr.intercept_, axes[0], 'b-' )
+
+x2=exam_data2[:,0:1]
+y2=exam_data2[:,1]
+# Fit a straight straight line to data with anomaly
+lr2 = linear_model.LinearRegression().fit(exam_data2[:,0:1],exam_data2[:,1])
+axes[1].plot(x2,y2, 'ro')
+
+# Plot two linear fits: from data with anomaly and from normal data
+plot_mb(lr2.coef_, lr2.intercept_, axes[1], 'b-')
+plot_mb(lr.coef_, lr.intercept_, axes[1], 'g--')
+
+axes[0].set_title('No anomaly')
+axes[1].set_title('With anomaly')
+plt.show()
+ftrs, tgt = exam_data1[:,0:1], exam_data1[:,1] 
+lr_train = linear_model.LinearRegression().fit(ftrs, tgt) 
+print(f'Slope: {lr_train.coef_}') 
+print(f'Intercept: {lr_train.intercept_:.{3}}') 
+print("-----------")
+print(lr_train.predict(ftrs))
+print("---------")
+print(tgt)
+train_scores = (tgt - lr_train.predict(ftrs))**2 
+print(train_scores)
+margin = 0.01
+threshold = max(train_scores) + margin
+print(f'Threshold: {threshold:.{3}}')
+def do_linreg_anomaly_scores(train, test):
+    ftrs, tgt = train[:,0:1], train[:,1]
+    lr_train = linear_model.LinearRegression().fit(ftrs, tgt)
+    pred=lr_train.predict(test[:,0:1])
+    anom_score = (test[:,1] - pred )**2
+    return anom_score
+output=do_linreg_anomaly_scores(exam_data1, exam_data2)
+print(train_scores)
+print(output)
+print(max(output))
+**PCA**
+x2=x1/2
+pca_example = np.array([[-3, -1.5], [-2.5, -1.25], [-1.5, -0.75], 
+                        [-1, -0.5], [-0.5, -0.25], [0, 0], [0.5, 0.26], 
+                        [1, 0.5],  [1.5, 0.75], [2.5, 1.25], [3, 1.5]])
+print(pca_example)
+mean_pca_example = np.mean(pca_example, axis=0, keepdims=True)
+mean_pca_example
+var_pca_example = np.var(pca_example, axis=0, keepdims=True)
+var_pca_example
+scaled_pca_example = pca_example/np.sqrt(var_pca_example)
+print(scaled_pca_example)
+# show the variances are equal
+scaled_pca_example.var(axis=0)
+fig, ax = plt.subplots()
+ax.scatter(pca_example[:,0], pca_example[:,1])
+ax.set_ylabel('$X_2$')
+ax.set_xlabel('$X_1$')
+ax.set_title('Original data')
+plt.show()
+pca = decomp.PCA(n_components=2)
+pca.fit(scaled_pca_example)
+pca_example_trf = pca.transform(scaled_pca_example) 
+fig2, ax2 = plt.subplots()
+ax2.scatter(pca_example_trf[:,0], pca_example_trf[:,1])
+ax2.set_ylabel('$PC2$')
+ax2.set_xlabel('$PC1$')
+ax2.set_title('Principal components')
+plt.show()
+def get_1d_projected_vectors(obs, pca_object):
+    # Note: The projection of vector a (data) along vector b (PC1)
+    # is given by  [b / len(b)]* (len (a) cos (theta))
+    # where theta is the angle between and b and the term in 
+    # square parenthesis is a unit vector in the b direction
+    #
+    # Since cos (theta) = dot(a,b)/(len(a)len(b))
+    # the projection can be written as
+    # projs = b*[dot(a,b)/len(b)^2]
+    #
+    # The term in square parethenses is y_lengths
+    # The projs is calculated adding back the mean
+    # subtracted previously to center the data
+    #
+    # This is a very explicit way of handling the calculation.
+    # See notes in "higher dimension" to see a way of generalizing
+    # this to higher dimensions, while encapsulating the vector math.
+    ssX = StandardScaler()
+    centered_data = ssX.fit_transform(obs)
+    pca_dirs = pca_object.components_
+    
+    y_lengths = centered_data.dot(pca_dirs.T) / pca_dirs.dot(pca_dirs.T)
+    centered_projs = y_lengths*(pca_dirs)
+    
+    # Return the data to its original uncentered (and unscaled) positions
+    return ssX.inverse_transform(centered_projs)
+
+def do_pca_anomaly_scores(obs, pca_object):
+    projected_vectors = get_1d_projected_vectors(obs, pca_object)    
+    return nla.norm(obs-projs, axis=1)
+
+def do_1d_pca_anomaly_scores(obs):
+    fig, ax = plt.subplots()
+    ax.set_ylabel('$X_2$')
+    ax.set_xlabel('$X_1$')
+    ax.set_title('Original data with PCA')
+    x=pca_example[:,0:1]
+    y=pca_example[:,1]
+    # draw data
+    ax.scatter(x,y, label='data')
+    
+
+    # Step 1: center and scale the data
+    ssX = StandardScaler()
+    centered_data = ssX.fit_transform(obs)
+    mean = ssX.mean_
+    print("-----------------")
+    print(centered_data)
+    
+    #for completeness, show mean on plot
+    ax.scatter(*mean.T, c='b', marker='^', label='mean') 
+
+
+    # Step 2: compute prinicpal components
+    # Here we focus on first PC  (greatest proportion of variance)
+    pca = decomp.PCA(n_components=1)
+    pca.fit_transform(centered_data)
+    pca_dirs = pca.components_
+    
+    print("-------------")
+    print(pca.components_)
+    # draw principal components
+    pca_endpoints = np.r_[-3.5*ssX.inverse_transform(pca_dirs),
+                           3.5*ssX.inverse_transform(pca_dirs)]
+    print("-----------------")
+    print(pca_endpoints)
+    ax.plot(*pca_endpoints.T, 'y', label='PC1')#line
+    
+
+    # Step 3: Project our examples onto the PCs
+    # 
+    projs = get_1d_projected_vectors(obs, pca)
+    ax.plot(*projs.T, 'r.', label='projected data')
+    ax.legend(loc='best')
+    
+    # Step 4: Calculate distance between original and projected examples
+    # Step 5: Use the distance to score the anomalies
+    # The distance is the Euclidean norm and 
+    # we use it as the anomaly score
+    return nla.norm(obs-projs, axis=1)
+    
+    
+pca_example_scores = do_1d_pca_anomaly_scores(pca_example)
+print(pca_example_scores)
+print(pca_example[np.argmax(pca_example_scores)])
+blobs_X, y = sk_data.make_blobs(centers=[[0,0], [10,10]])
+figure, axes = plt.subplots(figsize=(6,6))
+axes.scatter(*blobs_X.T, c=y)
+
+spike_1 = np.array([[6.0,6.0]]) # Anomaly 1
+spike_2 = np.array([[0.0,10]])  # Anomaly 2
+axes.scatter(*spike_1.T, c='r')
+axes.scatter(*spike_2.T, c='g')
+axes.set_aspect('equal')
+axes.set_ylabel('$X_2$')
+axes.set_xlabel('$X_1$')
+axes.set_title('Original cluster data with two anomalies')
+
+# Combine the data so that the last two points are the anomalies
+cluster_data = np.concatenate([blobs_X, spike_1, spike_2])
+
+cluster_data_scores = do_1d_pca_anomaly_scores(cluster_data)
+print(cluster_data_scores)
+print(cluster_data_scores.shape)
+print(max(cluster_data_scores))
+#print(min(cluster_data_scores))
+print(cluster_data[np.argmax(cluster_data_scores)])
+#print(cluster_data[np.argmin(cluster_data_scores)])
+**SVM**
+def do_svm_anomaly_scores(obs):
+    
+    oc_svm = svm.OneClassSVM(gamma='auto').fit(obs)
+    scores = oc_svm.decision_function(obs).flatten()
+    
+    # Find the largest score and use it to normalize the scores
+    max_score = np.max(np.abs(scores))
+    print(max_score)
+    
+    # scores from oc_svm use "negative is anomaly"
+    # To follow our previous convention
+    # we multiply by -1 and divide by the maximum score to get scores
+    # in the range [-1, 1] with positive values indicating anomalies
+    return - scores
+#print(do_svm_anomaly_scores(cluster_data))
+print (do_svm_anomaly_scores(cluster_data).argsort()[-5:])
+x=do_svm_anomaly_scores(cluster_data)
+point=np.argmax(x)
+print(point)
